@@ -4,6 +4,42 @@ import requests
 
 BASE_URL = "https://v3.football.api-sports.io"
 
+# La API solo reconoce nombres de país en inglés. Traducimos los más comunes
+# para que buscar "Brasil", "España", etc. funcione igual que en inglés.
+PAISES_ES_EN = {
+    "argentina": "Argentina",
+    "brasil": "Brazil",
+    "españa": "Spain",
+    "espana": "Spain",
+    "inglaterra": "England",
+    "irlanda": "Ireland",
+    "estados unidos": "USA",
+    "eeuu": "USA",
+    "ee.uu.": "USA",
+    "alemania": "Germany",
+    "italia": "Italy",
+    "francia": "France",
+    "portugal": "Portugal",
+    "mexico": "Mexico",
+    "méxico": "Mexico",
+    "uruguay": "Uruguay",
+    "chile": "Chile",
+    "colombia": "Colombia",
+    "paraguay": "Paraguay",
+    "peru": "Peru",
+    "perú": "Peru",
+    "holanda": "Netherlands",
+    "paises bajos": "Netherlands",
+    "países bajos": "Netherlands",
+    "belgica": "Belgium",
+    "bélgica": "Belgium",
+    "turquia": "Turkey",
+    "turquía": "Turkey",
+    "japon": "Japan",
+    "japón": "Japan",
+    "arabia saudita": "Saudi Arabia",
+}
+
 
 def _headers() -> dict:
     api_key = os.environ.get("API_FOOTBALL_KEY")
@@ -23,7 +59,7 @@ def buscar_ligas(pais: str | None = None, nombre: str | None = None) -> list[dic
     """
     params = {}
     if pais:
-        params["country"] = pais
+        params["country"] = PAISES_ES_EN.get(pais.strip().lower(), pais)
     if nombre:
         params["search"] = nombre
 

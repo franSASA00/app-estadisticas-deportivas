@@ -46,10 +46,24 @@
       if (!q) return;
       cont.innerHTML = 'Buscando...';
 
-      // Probamos primero como país, y si no trae resultados, como nombre de liga
-      let ligas = await fetch(`/api/ligas?pais=${encodeURIComponent(q)}`).then(r => r.ok ? r.json() : []);
-      if (!ligas.length) {
-        ligas = await fetch(`/api/ligas?nombre=${encodeURIComponent(q)}`).then(r => r.ok ? r.json() : []);
+      async function intentarBusqueda(url) {
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.detail || `Error ${resp.status}`);
+        }
+        return resp.json();
+      }
+
+      let ligas;
+      try {
+        ligas = await intentarBusqueda(`/api/ligas?pais=${encodeURIComponent(q)}`);
+        if (!ligas.length) {
+          ligas = await intentarBusqueda(`/api/ligas?nombre=${encodeURIComponent(q)}`);
+        }
+      } catch (e) {
+        cont.innerHTML = `<p class="aviso">Error al buscar: ${e.message}</p>`;
+        return;
       }
 
       if (!ligas.length) {

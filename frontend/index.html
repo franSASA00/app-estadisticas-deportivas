@@ -97,6 +97,11 @@
       cont.innerHTML = 'Buscando partidos de los próximos 7 días...';
 
       const resp = await fetch(`/api/fixtures?league_id=${ligaSeleccionada.league_id}&season=${ligaSeleccionada.temporada_actual}&dias=7`);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        cont.innerHTML = `<p class="aviso">Error al buscar partidos: ${err.detail || resp.status}</p>`;
+        return;
+      }
       const fixtures = await resp.json();
 
       if (!fixtures.length) {
@@ -127,6 +132,11 @@
       const div = document.getElementById('resultado');
       div.innerHTML = 'Calculando predicción...';
       const resp = await fetch(`/api/prediccion?league_id=${ligaSeleccionada.league_id}&season=${ligaSeleccionada.temporada_actual}&local_id=${localId}&visita_id=${visitaId}`);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        div.innerHTML = `<p class="aviso">Error al calcular la predicción: ${err.detail || resp.status}</p>`;
+        return;
+      }
       const r = await resp.json();
       div.innerHTML = `
         <h2>${r.equipo_local} vs ${r.equipo_visita}</h2>

@@ -15,14 +15,35 @@ def _headers() -> dict:
     return {"x-apisports-key": api_key}
 
 
-def buscar_ligas(pais: str) -> list[dict]:
-    resp = requests.get(f"{BASE_URL}/leagues", headers=_headers(), params={"country": pais})
+def buscar_ligas(pais: str | None = None, nombre: str | None = None) -> list[dict]:
+    """Busca ligas de cualquier país del mundo, por país y/o por nombre de liga.
+
+    Ambos parámetros son opcionales pero hay que pasar al menos uno (la API
+    no permite listar todas las ligas del mundo sin filtro).
+    """
+    params = {}
+    if pais:
+        params["country"] = pais
+    if nombre:
+        params["search"] = nombre
+
+    resp = requests.get(f"{BASE_URL}/leagues", headers=_headers(), params=params)
     resp.raise_for_status()
     data = resp.json()["response"]
-    return [
-        {"league_id": item["league"]["id"], "nombre": item["league"]["name"], "tipo": item["league"]["type"]}
-        for item in data
-    ]
+
+    resultado = []
+    for item in data:
+        temporada_actual = next(
+            (s["year"] for s in item.get("seasons", []) if s.get("current")), None
+        )
+        resultado.append({
+            "league_id": item["league"]["id"],
+            "nombre": item["league"]["name"],
+            "tipo": item["league"]["type"],
+            "pais": item["country"]["name"],
+            "temporada_actual": temporada_actual,
+        })
+    return resultado
 
 
 def buscar_equipo(league_id: int, season: int, nombre_equipo: str) -> list[dict]:
@@ -64,12 +85,12 @@ def stats_equipo(league_id: int, season: int, team_id: int) -> dict:
     }
 
 
-def fixtures_por_fecha(fecha: str, league_id: int, season: int) -> list[dict]:
-    """fecha en formato YYYY-MM-DD. Devuelve los partidos programados de esa liga ese día."""
+def fixtures_en_rango(league_id: int, season: int, desde: str, hasta: str) -> list[dict]:
+    """desde/hasta en formato YYYY-MM-DD. Devuelve los partidos programados de esa liga en ese rango."""
     resp = requests.get(
         f"{BASE_URL}/fixtures",
         headers=_headers(),
-        params={"date": fecha, "league": league_id, "season": season},
+        params={"league": league_id, "season": season, "from": desde, "to": hasta},
     )
     resp.raise_for_status()
     data = resp.json()["response"]

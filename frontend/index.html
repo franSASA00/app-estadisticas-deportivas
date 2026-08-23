@@ -8,81 +8,111 @@
   body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; color: #222; }
   h1 { font-size: 1.4rem; }
   label { display: block; margin-top: 12px; font-size: 0.9rem; color: #555; }
-  select, input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
-  button { margin-top: 16px; padding: 10px 16px; background: #2E86AB; color: white; border: none; border-radius: 6px; cursor: pointer; }
+  input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
+  button { margin-top: 12px; padding: 10px 16px; background: #2E86AB; color: white; border: none; border-radius: 6px; cursor: pointer; }
   button:hover { background: #256d8a; }
+  .liga-opcion { padding: 8px; border: 1px solid #ddd; border-radius: 6px; margin-top: 6px; cursor: pointer; }
+  .liga-opcion:hover { background: #f5f5f5; }
+  .liga-elegida { background: #eaf4fa; border-color: #2E86AB; }
+  .dia-header { margin-top: 18px; font-weight: 600; color: #444; border-bottom: 1px solid #eee; padding-bottom: 4px; }
   .fixture { padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-top: 8px; cursor: pointer; }
   .fixture:hover { background: #f5f5f5; }
   #resultado { margin-top: 24px; }
   canvas { max-height: 280px; }
   .aviso { color: #a00; font-size: 0.9rem; }
+  .muted { color: #888; font-size: 0.85rem; }
 </style>
 </head>
 <body>
   <h1>⚽ Predicción de resultados</h1>
 
-  <label>País / liga</label>
-  <select id="pais"></select>
+  <label>Buscar liga (por nombre o por país — cualquier liga del mundo)</label>
+  <input type="text" id="buscar" placeholder="ej: Premier League, Argentina, Serie A..." />
+  <button onclick="buscarLigas()">Buscar</button>
 
-  <label>Fecha del partido</label>
-  <input type="date" id="fecha" />
-
-  <button onclick="cargarFixtures()">Buscar partidos</button>
-
+  <div id="ligas"></div>
   <div id="fixtures"></div>
   <div id="resultado"></div>
 
   <script>
-    let CONFIG = null;
+    let ligaSeleccionada = null;
     let chart = null;
 
-    async function init() {
-      const resp = await fetch('/api/config');
-      CONFIG = await resp.json();
-      const select = document.getElementById('pais');
-      Object.entries(CONFIG.ligas).forEach(([pais, leagueId]) => {
-        const opt = document.createElement('option');
-        opt.value = leagueId ?? '';
-        opt.textContent = leagueId ? pais : `${pais} (falta configurar league_id)`;
-        if (!leagueId) opt.disabled = true;
-        select.appendChild(opt);
-      });
-      // Fecha de mañana por default
-      const manana = new Date();
-      manana.setDate(manana.getDate() + 1);
-      document.getElementById('fecha').value = manana.toISOString().slice(0, 10);
-    }
-
-    async function cargarFixtures() {
-      const leagueId = document.getElementById('pais').value;
-      const fecha = document.getElementById('fecha').value;
-      const cont = document.getElementById('fixtures');
+    async function buscarLigas() {
+      const q = document.getElementById('buscar').value.trim();
+      const cont = document.getElementById('ligas');
+      document.getElementById('fixtures').innerHTML = '';
       document.getElementById('resultado').innerHTML = '';
-      if (!leagueId) {
-        cont.innerHTML = '<p class="aviso">Elegí una liga con league_id configurado.</p>';
-        return;
-      }
+      if (!q) return;
       cont.innerHTML = 'Buscando...';
-      const resp = await fetch(`/api/fixtures?fecha=${fecha}&league_id=${leagueId}&season=${CONFIG.season}`);
-      const fixtures = await resp.json();
-      if (!fixtures.length) {
-        cont.innerHTML = '<p>No hay partidos programados para esa fecha en esta liga.</p>';
+
+      // Probamos primero como país, y si no trae resultados, como nombre de liga
+      let ligas = await fetch(`/api/ligas?pais=${encodeURIComponent(q)}`).then(r => r.ok ? r.json() : []);
+      if (!ligas.length) {
+        ligas = await fetch(`/api/ligas?nombre=${encodeURIComponent(q)}`).then(r => r.ok ? r.json() : []);
+      }
+
+      if (!ligas.length) {
+        cont.innerHTML = '<p class="aviso">No encontré ligas con ese nombre/país.</p>';
         return;
       }
+
       cont.innerHTML = '';
-      fixtures.forEach(f => {
+      ligas.forEach(l => {
         const div = document.createElement('div');
-        div.className = 'fixture';
-        div.textContent = `${f.local_nombre} vs ${f.visita_nombre} — ${f.fecha}`;
-        div.onclick = () => verPrediccion(leagueId, f.local_id, f.visita_id);
+        div.className = 'liga-opcion';
+        div.textContent = `${l.nombre} — ${l.pais}${l.temporada_actual ? ' (temporada ' + l.temporada_actual + ')' : ' (sin temporada activa)'}`;
+        div.onclick = () => {
+          if (!l.temporada_actual) {
+            alert('Esta liga no tiene una temporada activa ahora mismo.');
+            return;
+          }
+          ligaSeleccionada = l;
+          document.querySelectorAll('.liga-opcion').forEach(e => e.classList.remove('liga-elegida'));
+          div.classList.add('liga-elegida');
+          cargarFixtures();
+        };
         cont.appendChild(div);
       });
     }
 
-    async function verPrediccion(leagueId, localId, visitaId) {
+    async function cargarFixtures() {
+      const cont = document.getElementById('fixtures');
+      document.getElementById('resultado').innerHTML = '';
+      if (!ligaSeleccionada) return;
+      cont.innerHTML = 'Buscando partidos de los próximos 7 días...';
+
+      const resp = await fetch(`/api/fixtures?league_id=${ligaSeleccionada.league_id}&season=${ligaSeleccionada.temporada_actual}&dias=7`);
+      const fixtures = await resp.json();
+
+      if (!fixtures.length) {
+        cont.innerHTML = '<p>No hay partidos programados en los próximos 7 días para esta liga.</p>';
+        return;
+      }
+
+      cont.innerHTML = '';
+      let diaActual = null;
+      fixtures.forEach(f => {
+        const dia = f.fecha.slice(0, 10);
+        if (dia !== diaActual) {
+          diaActual = dia;
+          const header = document.createElement('div');
+          header.className = 'dia-header';
+          header.textContent = dia;
+          cont.appendChild(header);
+        }
+        const div = document.createElement('div');
+        div.className = 'fixture';
+        div.textContent = `${f.local_nombre} vs ${f.visita_nombre}`;
+        div.onclick = () => verPrediccion(f.local_id, f.visita_id);
+        cont.appendChild(div);
+      });
+    }
+
+    async function verPrediccion(localId, visitaId) {
       const div = document.getElementById('resultado');
       div.innerHTML = 'Calculando predicción...';
-      const resp = await fetch(`/api/prediccion?league_id=${leagueId}&local_id=${localId}&visita_id=${visitaId}&season=${CONFIG.season}`);
+      const resp = await fetch(`/api/prediccion?league_id=${ligaSeleccionada.league_id}&season=${ligaSeleccionada.temporada_actual}&local_id=${localId}&visita_id=${visitaId}`);
       const r = await resp.json();
       div.innerHTML = `
         <h2>${r.equipo_local} vs ${r.equipo_visita}</h2>
@@ -106,8 +136,6 @@
         },
       });
     }
-
-    init();
   </script>
 </body>
 </html>

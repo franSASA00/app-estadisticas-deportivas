@@ -1,8 +1,8 @@
 # Predicción de resultados de fútbol
 
 App local (FastAPI + web simple) para calcular probabilidades de victoria / empate /
-derrota de partidos de clubes en Argentina, Irlanda, Inglaterra, España y Estados Unidos,
-usando estadísticas reales (goles a favor/en contra, tarjetas) y un modelo de Poisson.
+derrota de partidos de club de **cualquier liga del mundo**, usando estadísticas reales
+(goles a favor/en contra, tarjetas) y un modelo de Poisson.
 
 ## Instalación
 
@@ -14,28 +14,29 @@ cp .env.example .env
 # editar .env y pegar tu API key de https://dashboard.api-football.com
 ```
 
-## Configurar las ligas (una sola vez)
-
-1. Corré la app: `uvicorn app.main:app --reload`
-2. Andá a `http://localhost:8000/api/ligas?pais=Argentina` (y repetí para Ireland, England,
-   Spain, USA) para ver los `league_id` disponibles.
-3. Completá `app/config.py` con el `league_id` de la primera división de cada país.
-4. Reiniciá la app.
-
 ## Usar
 
-1. Abrí `http://localhost:8000` en el navegador.
-2. Elegí liga y fecha (por defecto, mañana).
-3. Buscá los partidos programados y hacé click en uno para ver la predicción.
+1. Corré la app: `uvicorn app.main:app --reload`
+2. Abrí `http://localhost:8000` en el navegador.
+3. Buscá una liga por nombre o por país (ej: "Premier League", "Argentina", "Serie A").
+4. Elegí una de las ligas encontradas — se detecta sola la temporada activa.
+5. Vas a ver los partidos programados para los próximos 7 días, agrupados por día.
+6. Click en un partido para ver la predicción (% victoria local / empate / victoria visitante).
 
 ## Estructura
 
 ```
 app/
   main.py        # endpoints FastAPI + sirve el frontend
-  futbol_api.py  # llamadas a API-Football
+  futbol_api.py  # llamadas a API-Football (ligas, equipos, stats, fixtures)
   modelo.py      # modelo de Poisson
-  config.py      # league_id de cada país + temporada
 frontend/
-  index.html     # UI simple con Chart.js
+  index.html     # UI con buscador de ligas y Chart.js
 ```
+
+## Notas
+
+- El plan free de API-Football tiene un límite de 100 requests/día — cada predicción
+  hace 2 llamadas (stats de cada equipo), así que alcanza para ~40-50 predicciones diarias.
+- Si una liga no tiene "temporada activa" en este momento (fuera de calendario), no se
+  va a poder consultar hasta que arranque la temporada.

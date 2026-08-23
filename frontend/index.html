@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Predicción de resultados de fútbol</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 1.4rem; }
+  label { display: block; margin-top: 12px; font-size: 0.9rem; color: #555; }
+  select, input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
+  button { margin-top: 16px; padding: 10px 16px; background: #2E86AB; color: white; border: none; border-radius: 6px; cursor: pointer; }
+  button:hover { background: #256d8a; }
+  .fixture { padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-top: 8px; cursor: pointer; }
+  .fixture:hover { background: #f5f5f5; }
+  #resultado { margin-top: 24px; }
+  canvas { max-height: 280px; }
+  .aviso { color: #a00; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+  <h1>⚽ Predicción de resultados</h1>
+
+  <label>País / liga</label>
+  <select id="pais"></select>
+
+  <label>Fecha del partido</label>
+  <input type="date" id="fecha" />
+
+  <button onclick="cargarFixtures()">Buscar partidos</button>
+
+  <div id="fixtures"></div>
+  <div id="resultado"></div>
+
+  <script>
+    let CONFIG = null;
+    let chart = null;
+
+    async function init() {
+      const resp = await fetch('/api/config');
+      CONFIG = await resp.json();
+      const select = document.getElementById('pais');
+      Object.entries(CONFIG.ligas).forEach(([pais, leagueId]) => {
+        const opt = document.createElement('option');
+        opt.value = leagueId ?? '';
+        opt.textContent = leagueId ? pais : `${pais} (falta configurar league_id)`;
+        if (!leagueId) opt.disabled = true;
+        select.appendChild(opt);
+      });
+      // Fecha de mañana por default
+      const manana = new Date();
+      manana.setDate(manana.getDate() + 1);
+      document.getElementById('fecha').value = manana.toISOString().slice(0, 10);
+    }
+
+    async function cargarFixtures() {
+      const leagueId = document.getElementById('pais').value;
+      const fecha = document.getElementById('fecha').value;
+      const cont = document.getElementById('fixtures');
+      document.getElementById('resultado').innerHTML = '';
+      if (!leagueId) {
+        cont.innerHTML = '<p class="aviso">Elegí una liga con league_id configurado.</p>';
+        return;
+      }
+      cont.innerHTML = 'Buscando...';
+      const resp = await fetch(`/api/fixtures?fecha=${fecha}&league_id=${leagueId}&season=${CONFIG.season}`);
+      const fixtures = await resp.json();
+      if (!fixtures.length) {
+        cont.innerHTML = '<p>No hay partidos programados para esa fecha en esta liga.</p>';
+        return;
+      }
+      cont.innerHTML = '';
+      fixtures.forEach(f => {
+        const div = document.createElement('div');
+        div.className = 'fixture';
+        div.textContent = `${f.local_nombre} vs ${f.visita_nombre} — ${f.fecha}`;
+        div.onclick = () => verPrediccion(leagueId, f.local_id, f.visita_id);
+        cont.appendChild(div);
+      });
+    }
+
+    async function verPrediccion(leagueId, localId, visitaId) {
+      const div = document.getElementById('resultado');
+      div.innerHTML = 'Calculando predicción...';
+      const resp = await fetch(`/api/prediccion?league_id=${leagueId}&local_id=${localId}&visita_id=${visitaId}&season=${CONFIG.season}`);
+      const r = await resp.json();
+      div.innerHTML = `
+        <h2>${r.equipo_local} vs ${r.equipo_visita}</h2>
+        <p>Goles esperados: ${r.goles_esperados_local} - ${r.goles_esperados_visita}</p>
+        <canvas id="chart"></canvas>
+      `;
+      const ctx = document.getElementById('chart').getContext('2d');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: [`Gana ${r.equipo_local}`, 'Empate', `Gana ${r.equipo_visita}`],
+          datasets: [{
+            data: [r.prob_gana_local, r.prob_empate, r.prob_gana_visita],
+            backgroundColor: ['#2E86AB', '#A9A9A9', '#D64550'],
+          }],
+        },
+        options: {
+          scales: { y: { beginAtZero: true, max: 100 } },
+          plugins: { legend: { display: false } },
+        },
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
